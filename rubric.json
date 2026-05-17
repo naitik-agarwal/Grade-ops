@@ -1,0 +1,18 @@
+[
+  {
+    "question_id": "Q1",
+    "total_points": 5,
+    "grading_criteria": [
+      { "step": "Power Rule on x^2", "points": 2, "condition": "Award 2 points if they apply power rule to x^2 to get 2x." },
+      { "step": "Derivative of 5x", "points": 2, "condition": "Award 2 points if they derive 5x as 5." },
+      { "step": "Final Answer", "points": 1, "condition": "Award 1 point only if final answer is exactly 2x + 5." }
+    ]
+  },
+  {
+    "question_id": "Q2",
+    "total_points": 5,
+    "grading_criteria": [
+      { "step": "Basic concept", "points": 5, "condition": "Award 5 pts if they show understanding of the second question." }
+    ]
+  }
+]

@@ -33,14 +33,13 @@ class PlagiarismDetector:
         print("🔍 Comparing Student 1 and Student 2 logic structures...")
 
         prompt = ChatPromptTemplate.from_messages([
-            ("system", """You are an elite Academic Integrity Investigator for a math department.
-            Your job is to compare two student answers and detect plagiarism.
+            ("system", """You are an elite Academic Integrity Investigator.
+            Your job is to compare two student handwritten exam answers and detect plagiarism.
             
-            CRITICAL RULE: Getting the correct answer using standard methods is NOT plagiarism. 
-            However, making the EXACT SAME bizarre mathematical mistake, sharing the same strange 
-            formatting, or skipping the exact same required logical steps is highly suspicious.
-            
-            Analyze the logic structures and flag if you believe they copied each other."""),
+            CRITICAL RULES:
+            1. VERBATIM MATCH: If the written phrasing, formatting, or equations are word-for-word identical, FLAG IT with 99% confidence. Students do not write the exact same sentences by coincidence.
+            2. SHARED MISTAKES: If both students share the exact same incorrect mathematical logic, it is undeniable proof of copying.
+            3. NEVER assume an answer is "correct" just because they both wrote it. Treat identical short answers as highly suspicious."""),
             ("human", "Student 1 Answer:\n{student_1}\n\nStudent 2 Answer:\n{student_2}\n\nAnalyze for shared anomalies.")
         ])
 

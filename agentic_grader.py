@@ -1,91 +1,69 @@
 import os
 import json
-from dotenv import load_dotenv
-from pydantic import BaseModel, Field
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, Field
+from typing import List
 
-# Load the hidden Gemini key
-load_dotenv()
-
-# ---------------------------------------------------------
-# 1. THE DATA SCHEMA (What the frontend dashboard will read)
-# ---------------------------------------------------------
+# --- 1. NEW NESTED DATA STRUCTURES ---
 class StepGrade(BaseModel):
-    step_name: str = Field(description="The exact name of the rubric step")
-    points_awarded: int = Field(description="Points given for this specific step")
-    justification: str = Field(description="Short explanation of why these points were awarded or deducted")
+    step_name: str = Field(description="Name of the rubric step")
+    points_awarded: int = Field(description="Points given for this step")
+    justification: str = Field(description="Why points were given or lost")
 
-class FinalGrade(BaseModel):
-    total_score: int = Field(description="Total points awarded calculated from the steps")
-    step_grades: list[StepGrade] = Field(description="Breakdown of grading by each rubric step")
-    general_feedback: str = Field(description="One sentence of overall feedback for the student")
+class QuestionGrade(BaseModel):
+    question_id: str = Field(description="e.g., Q1, Q2")
+    score: int = Field(description="Total points awarded for this specific question")
+    max_points: int = Field(description="Maximum possible points for this question")
+    feedback: str = Field(description="Feedback for this specific question")
+    step_grades: List[StepGrade] = Field(description="Breakdown of points per step")
 
-# ---------------------------------------------------------
-# 2. THE LANGCHAIN AGENT
-# ---------------------------------------------------------
+class FullExamReport(BaseModel):
+    total_exam_score: int = Field(description="Sum of all question scores")
+    max_exam_points: int = Field(description="Sum of all max points")
+    questions: List[QuestionGrade] = Field(description="List of all graded questions")
+    general_feedback: str = Field(description="Overall feedback for the student's entire exam")
+
+# --- 2. AGENT DEFINITION ---
 class AgenticGrader:
     def __init__(self):
-        # We use a low temperature (0.1) so the TA is strict, consistent, and doesn't hallucinate
+        # Initialize Gemini 2.5 Flash
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
-            temperature=0.1, 
+            temperature=0.1,
             api_key=os.getenv("GEMINI_API_KEY")
         )
         
-        # We FORCE the LLM to output our exact Pydantic schema
-        self.structured_llm = self.llm.with_structured_output(FinalGrade)
-        print("🧠 Agentic Grader Initialized. AI TA is ready...\n")
+        # Bind the new Full Exam schema
+        self.structured_llm = self.llm.with_structured_output(FullExamReport)
 
-    def grade_answer(self, rubric_path: str, student_answer: str):
-        # Load the JSON rubric
-        try:
-            with open(rubric_path, 'r') as f:
-                rubric = json.load(f)
-        except FileNotFoundError:
-            return "❌ Error: Could not find rubric.json"
-
-        print(f"📖 Reading Rubric: {rubric['question_id']} (Total Possible Points: {rubric['total_points']})")
-        print(f"📝 Evaluating Student Answer: '{student_answer}'...")
-
-        # Create the strict prompt template
-        prompt = ChatPromptTemplate.from_messages([
-            ("system", "You are an expert Math Teaching Assistant. You are strict, fair, and award partial credit exactly as defined in the rubric. You evaluate the student's logic step-by-step."),
-            ("human", "Here is the strict grading rubric:\n{rubric}\n\nHere is the student's extracted answer:\n{student_answer}\n\nGrade the student's answer step-by-step and return the evaluation.")
+        # Update the Prompt to handle multiple questions
+        self.prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an expert Professor grading an entire handwritten exam.
+            You will be given a JSON array of rubrics (one for each question) and the raw extracted text from a student's exam.
+            
+            YOUR TASKS:
+            1. Analyze the student's text and identify which parts correspond to which question in the rubric.
+            2. Grade EVERY question individually based strictly on its specific rubric criteria.
+            3. Calculate the total exam score and max possible points.
+            4. Be lenient with spelling/grammar if the core concept or math logic is correct.
+            5. If a question is entirely missing from the student's text, give it a 0.
+            
+            Rubric Data:
+            {rubric_data}
+            """),
+            ("human", "Student Exam Text:\n{student_answer}\n\nGrade the entire exam and return the structured report.")
         ])
 
-        # Build the Langchain pipeline (Prompt -> LLM)
-        grading_chain = prompt | self.structured_llm
+    def grade_answer(self, rubric_file_path: str, student_answer: str):
+        """Reads the multi-question rubric and grades the full exam."""
+        try:
+            with open(rubric_file_path, "r") as f:
+                rubric_data = f.read()
+        except Exception as e:
+            rubric_data = "Error loading rubric."
 
-        # Execute the pipeline
-        result = grading_chain.invoke({
-            "rubric": json.dumps(rubric, indent=2),
-            "student_answer": student_answer
-        })
-
-        return result
-
-# ---------------------------------------------------------
-# 3. TEST THE BRAIN
-# ---------------------------------------------------------
-if __name__ == "__main__":
-    grader = AgenticGrader()
-    
-    # This is the fake answer we pretend the Vision Engine extracted
-    # (Notice how the student got the 2x right, but messed up the +5)
-    mock_extracted_text = "The derivative is f'(x) = 2x + 3"
-    
-    final_evaluation = grader.grade_answer("rubric.json", mock_extracted_text)
-    
-    print("\n" + "="*50)
-    print("                 AI GRADING REPORT")
-    print("="*50)
-    print(f"Total Score: {final_evaluation.total_score} / 5\n")
-    print("Step-by-Step Breakdown:")
-    for step in final_evaluation.step_grades:
-        status = "✅" if step.points_awarded > 0 else "❌"
-        print(f" {status} {step.step_name}: {step.points_awarded} pts")
-        print(f"    Reason: {step.justification}")
-    
-    print(f"\n💬 TA Feedback: {final_evaluation.general_feedback}")
-    print("="*50)
+        chain = self.prompt | self.structured_llm
+        result = chain.invoke({"rubric_data": rubric_data, "student_answer": student_answer})
+        
+        return result.dict()
