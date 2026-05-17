@@ -8,6 +8,8 @@ function App() {
   const [activeTab, setActiveTab] = useState('grading')
 
   // --- 2. GRADING STATE ---
+  const [files, setFiles] = useState([])         // <--- Array of files now!
+  const [currentFileIndex, setCurrentFileIndex] = useState(0) // Track batch progress
   const [studentName, setStudentName] = useState("")
   const [file, setFile] = useState(null)
   const [previewUrl, setPreviewUrl] = useState(null)
@@ -68,29 +70,34 @@ function App() {
   // ==========================================
 
   // A. GRADING PIPELINE
-  const processExam = async () => {
-    if (!file) return setError("Please select an image first!")
+  // A. GRADING PIPELINE (BATCH MODE)
+  const runBatchPipeline = async () => {
+    if (files.length === 0) return setError("No more exams in queue!")
+    
+    setLoadingStep("extracting")
+    setError(null)
+
     try {
-      setError(null)
-      setLoadingStep("extracting")
-      
+      // 1. Extract (Always process the first file in the current queue)
       const formData = new FormData()
-      formData.append("file", file)
+      formData.append("file", files[0])
       const extractRes = await axios.post("http://127.0.0.1:8000/api/extract", formData)
       const text = extractRes.data.extracted_text
       setExtractedText(text)
 
+      // 2. Grade
       setLoadingStep("grading")
       const gradeRes = await axios.post("http://127.0.0.1:8000/api/grade", {
         student_answer: text, 
         rubric_data: rubricText
       })
+      
       setGradeReport(gradeRes.data)
-      setIsOverriding(false) 
-      setLoadingStep(null)
+      setLoadingStep(null) // <--- THE CRITICAL FIX: This unlocks the UI!
+
     } catch (err) {
-      setError("API Error: " + (err.response?.data?.detail || err.message))
-      setLoadingStep(null)
+      setError(`Error on file ${files[0].name}: ` + (err.response?.data?.detail || err.message))
+      setLoadingStep(null) // Unlock UI on error too
     }
   }
 
@@ -151,8 +158,26 @@ function App() {
   //               UI HELPERS
   // ==========================================
 
-  const resetForNextExam = () => {
-    setGradeReport(null); setFile(null); setPreviewUrl(null); setIsOverriding(false); setStudentName(""); // <-- CLEARS THE NAME
+ const resetForNextExam = () => {
+    // Slice off the exam we just finished
+    const remainingFiles = files.slice(1)
+    setFiles(remainingFiles)
+    
+    // Clear the board for the next student
+    setGradeReport(null); 
+    setIsOverriding(false); 
+    setStudentName("");
+    setExtractedText(""); // Clear old OCR text
+    
+    if (remainingFiles.length > 0) {
+      // Load the next image in the queue
+      setPreviewUrl(URL.createObjectURL(remainingFiles[0])) 
+    } else {
+      // The queue is empty!
+      setPreviewUrl(null)
+      setCurrentFileIndex(0)
+      alert("🎉 All exams in the batch have been graded and saved!")
+    }
   }
 
   const triggerOverride = () => {
@@ -219,26 +244,39 @@ function App() {
               </div>
             )}
 
-            <h2>2. Upload Scan</h2>
-            {/* --- NEW INPUT BOX --- */}
+            <h2>2. Student Details & Batch Upload</h2>
+            
             <div style={{marginBottom: '15px'}}>
-              <label style={{display: 'block', fontWeight: 'bold', marginBottom: '5px', color: '#333'}}>Student Name / ID:</label>
+              <label style={{display: 'block', fontWeight: 'bold', marginBottom: '5px', color: '#333'}}>Student Name / ID (For Current Paper):</label>
               <input 
                 type="text" 
-                placeholder="e.g., John Doe or STU-9942" 
+                placeholder="e.g., STU-9942" 
                 value={studentName}
                 onChange={(e) => setStudentName(e.target.value)}
                 style={{width: '100%', padding: '10px', borderRadius: '4px', border: '1px solid #ccc', fontSize: '16px'}}
               />
             </div>
-            <input type="file" accept="image/*" onChange={(e) => {
-              setFile(e.target.files[0]); setPreviewUrl(URL.createObjectURL(e.target.files[0])); setGradeReport(null); setIsOverriding(false);
+
+            {/* NEW: multiple attribute allows highlighting many files! */}
+            <input type="file" accept="image/*" multiple onChange={(e) => {
+              const selectedFiles = Array.from(e.target.files)
+              setFiles(selectedFiles)
+              setPreviewUrl(URL.createObjectURL(selectedFiles[0])) // Preview first one
+              setGradeReport(null); setIsOverriding(false); setCurrentFileIndex(0);
             }} />
             
+            {files.length > 0 && (
+              <p style={{background: '#e3f2fd', padding: '10px', borderRadius: '4px'}}>
+                📁 {files.length} exams loaded in queue.
+              </p>
+            )}
+
             {previewUrl && <img src={previewUrl} alt="Exam Scan" style={{width: '100%', marginTop: '10px', border: '2px solid #ccc', borderRadius: '8px'}}/>}
 
-            <button className="run-btn" onClick={processExam} disabled={!file || loadingStep !== null}>
-              {loadingStep === "extracting" ? "📡 Running OCR..." : loadingStep === "grading" ? "🧠 AI is Grading..." : "🚀 Run AI Pipeline"}
+            <button className="run-btn" onClick={runBatchPipeline} disabled={files.length === 0 || loadingStep !== null}>
+              {loadingStep === "extracting" ? `📡 OCR: Exam ${currentFileIndex}/${files.length}...` : 
+               loadingStep === "grading" ? `🧠 AI: Grading Exam ${currentFileIndex}/${files.length}...` : 
+               `🚀 Run Batch AI Pipeline`}
             </button>
             {error && <div className="error-box">❌ {error}</div>}
           </section>
