@@ -18,16 +18,25 @@ function App() {
   const [gradeReport, setGradeReport] = useState(null)
   const [error, setError] = useState(null)
   
-  // Dynamic Rubric
-  const [rubricText, setRubricText] = useState(`{
-  "question_id": "Q1",
-  "total_points": 5,
-  "grading_criteria": [
-    { "step": "Power Rule on x^2", "points": 2, "condition": "Award 2 points if they apply power rule to x^2 to get 2x." },
-    { "step": "Derivative of 5x", "points": 2, "condition": "Award 2 points if they derive 5x as 5." },
-    { "step": "Final Answer", "points": 1, "condition": "Award 1 point only if final answer is exactly 2x + 5." }
-  ]
-}`)
+  // --- UPDATED: MULTI-QUESTION RUBRIC ARRAY ---
+  const [rubricText, setRubricText] = useState(`[
+  {
+    "question_id": "Q1",
+    "total_points": 5,
+    "grading_criteria": [
+      { "step": "Power Rule on x^2", "points": 2, "condition": "Award 2 points if they apply power rule to x^2 to get 2x." },
+      { "step": "Derivative of 5x", "points": 2, "condition": "Award 2 points if they derive 5x as 5." },
+      { "step": "Final Answer", "points": 1, "condition": "Award 1 point only if final answer is exactly 2x + 5." }
+    ]
+  },
+  {
+    "question_id": "Q2",
+    "total_points": 5,
+    "grading_criteria": [
+      { "step": "Basic concept", "points": 5, "condition": "Award 5 pts if they show understanding of the second question." }
+    ]
+  }
+]`)
 
   // --- 3. OVERRIDE STATE ---
   const [isOverriding, setIsOverriding] = useState(false)
@@ -54,7 +63,7 @@ function App() {
       if (!gradeReport || isOverriding) return; 
       
       if (e.key === 'Enter') {
-        saveGradeToDB("Approved", gradeReport.total_score, gradeReport.general_feedback)
+        saveGradeToDB("Approved", gradeReport.total_exam_score, gradeReport.general_feedback)
       }
       if (e.key === ' ') { 
         e.preventDefault()
@@ -69,7 +78,6 @@ function App() {
   //                API HANDLERS
   // ==========================================
 
-  // A. GRADING PIPELINE
   // A. GRADING PIPELINE (BATCH MODE)
   const runBatchPipeline = async () => {
     if (files.length === 0) return setError("No more exams in queue!")
@@ -78,7 +86,7 @@ function App() {
     setError(null)
 
     try {
-      // 1. Extract (Always process the first file in the current queue)
+      // 1. Extract
       const formData = new FormData()
       formData.append("file", files[0])
       const extractRes = await axios.post("http://127.0.0.1:8000/api/extract", formData)
@@ -93,11 +101,11 @@ function App() {
       })
       
       setGradeReport(gradeRes.data)
-      setLoadingStep(null) // <--- THE CRITICAL FIX: This unlocks the UI!
+      setLoadingStep(null)
 
     } catch (err) {
       setError(`Error on file ${files[0].name}: ` + (err.response?.data?.detail || err.message))
-      setLoadingStep(null) // Unlock UI on error too
+      setLoadingStep(null) 
     }
   }
 
@@ -105,12 +113,12 @@ function App() {
   const saveGradeToDB = async (statusLabel, finalScore, finalFeedback) => {
     try {
       await axios.post("http://127.0.0.1:8000/api/save-grade", {
-        student_id: studentName.trim() || "Unknown Student", // <-- UPDATED LINE
+        student_id: studentName.trim() || "Unknown Student", 
         total_score: finalScore,
         feedback: finalFeedback,
         status: statusLabel
       })
-      alert(`✅ Grade Saved to MongoDB! (${finalScore}/5) - ${statusLabel}`)
+      alert(`✅ Grade Saved to MongoDB! (${finalScore} Pts) - ${statusLabel}`)
       resetForNextExam()
     } catch (err) {
       alert("Failed to save to database. Is the Python backend running?")
@@ -159,21 +167,17 @@ function App() {
   // ==========================================
 
  const resetForNextExam = () => {
-    // Slice off the exam we just finished
     const remainingFiles = files.slice(1)
     setFiles(remainingFiles)
     
-    // Clear the board for the next student
     setGradeReport(null); 
     setIsOverriding(false); 
     setStudentName("");
-    setExtractedText(""); // Clear old OCR text
+    setExtractedText(""); 
     
     if (remainingFiles.length > 0) {
-      // Load the next image in the queue
       setPreviewUrl(URL.createObjectURL(remainingFiles[0])) 
     } else {
-      // The queue is empty!
       setPreviewUrl(null)
       setCurrentFileIndex(0)
       alert("🎉 All exams in the batch have been graded and saved!")
@@ -181,7 +185,7 @@ function App() {
   }
 
   const triggerOverride = () => {
-    setManualScore(gradeReport.total_score)
+    setManualScore(gradeReport.total_exam_score)
     setManualFeedback(gradeReport.general_feedback)
     setIsOverriding(true)
   }
@@ -235,12 +239,12 @@ function App() {
           <section className="panel upload-panel">
             {role === 'instructor' ? (
               <>
-                <h2>1. Define Rubric</h2>
-                <textarea value={rubricText} onChange={(e) => setRubricText(e.target.value)} rows={6} style={{width: '100%', marginBottom: '15px', fontFamily: 'monospace'}}/>
+                <h2>1. Define Exam Rubric (JSON Array)</h2>
+                <textarea value={rubricText} onChange={(e) => setRubricText(e.target.value)} rows={10} style={{width: '100%', marginBottom: '15px', fontFamily: 'monospace'}}/>
               </>
             ) : (
               <div style={{background: '#eee', padding: '10px', borderRadius: '4px', marginBottom: '15px'}}>
-                <strong>Current Rubric: </strong> Derivates Q1 (Locked by Instructor)
+                <strong>Current Exam Rubric: </strong> Locked by Instructor
               </div>
             )}
 
@@ -257,11 +261,10 @@ function App() {
               />
             </div>
 
-            {/* NEW: multiple attribute allows highlighting many files! */}
             <input type="file" accept="image/*" multiple onChange={(e) => {
               const selectedFiles = Array.from(e.target.files)
               setFiles(selectedFiles)
-              setPreviewUrl(URL.createObjectURL(selectedFiles[0])) // Preview first one
+              setPreviewUrl(URL.createObjectURL(selectedFiles[0])) 
               setGradeReport(null); setIsOverriding(false); setCurrentFileIndex(0);
             }} />
             
@@ -290,21 +293,32 @@ function App() {
                 {!isOverriding ? (
                   <>
                     <div className="score-header">
-                      <h3>Final AI Score:</h3>
-                      <span className="score-badge">{gradeReport.total_score} / 5</span>
+                      <h3>Final Exam Score:</h3>
+                      <span className="score-badge" style={{fontSize: '24px'}}>{gradeReport.total_exam_score} / {gradeReport.max_exam_points}</span>
                     </div>
-                    <ul className="step-list">
-                      {gradeReport.step_grades.map((step, idx) => (
-                        <li key={idx} className={step.points_awarded > 0 ? "step-pass" : "step-fail"}>
-                          <strong>{step.points_awarded > 0 ? "✅" : "❌"} {step.step_name} ({step.points_awarded} pts)</strong>
-                          <p>{step.justification}</p>
-                        </li>
-                      ))}
-                    </ul>
-                    <div className="feedback-box"><strong>TA Feedback: </strong> {gradeReport.general_feedback}</div>
+                    
+                    <div className="feedback-box" style={{marginBottom: '20px'}}><strong>General Feedback: </strong> {gradeReport.general_feedback}</div>
+
+                    {/* DYNAMIC MULTI-QUESTION MAPPING */}
+                    {gradeReport.questions.map((q, qIdx) => (
+                      <div key={qIdx} style={{ border: '1px solid #e0e0e0', margin: '15px 0', padding: '15px', borderRadius: '8px', background: '#fafafa' }}>
+                        <h4 style={{marginTop: 0, borderBottom: '2px solid #ddd', paddingBottom: '5px'}}>
+                          {q.question_id} <span style={{float: 'right', color: '#555'}}>{q.score} / {q.max_points} pts</span>
+                        </h4>
+                        <p style={{fontSize: '14px', fontStyle: 'italic'}}>{q.feedback}</p>
+                        <ul className="step-list">
+                          {q.step_grades.map((step, sIdx) => (
+                            <li key={sIdx} className={step.points_awarded > 0 ? "step-pass" : "step-fail"} style={{marginBottom: '5px'}}>
+                              <strong>{step.points_awarded > 0 ? "✅" : "❌"} {step.step_name} ({step.points_awarded} pts)</strong>
+                              <p style={{margin: '3px 0 0 0', fontSize: '13px'}}>{step.justification}</p>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    ))}
                     
                     <div style={{display: 'flex', gap: '10px', marginTop: '15px'}}>
-                      <button onClick={()=> saveGradeToDB("Approved", gradeReport.total_score, gradeReport.general_feedback)} style={{flex: 1, padding: '10px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>✅ Approve (Enter)</button>
+                      <button onClick={()=> saveGradeToDB("Approved", gradeReport.total_exam_score, gradeReport.general_feedback)} style={{flex: 1, padding: '10px', background: '#4caf50', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>✅ Approve (Enter)</button>
                       <button onClick={triggerOverride} style={{flex: 1, padding: '10px', background: '#ff9800', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer'}}>✏️ Override (Space)</button>
                     </div>
                   </>
@@ -313,10 +327,10 @@ function App() {
                   /* OVERRIDE VIEW */
                   <div className="override-mode" style={{border: '2px dashed #ff9800', padding: '15px', borderRadius: '8px', background: '#fff3e0'}}>
                     <h3 style={{color: '#e65100', marginTop: 0}}>⚠️ Manual TA Override Active</h3>
-                    <label><strong>Adjust Final Score:</strong></label>
+                    <label><strong>Adjust Final Exam Score:</strong></label>
                     <input type="number" value={manualScore} onChange={(e)=>setManualScore(e.target.value)} style={{width: '100%', padding: '10px', marginBottom: '15px', fontSize: '16px'}} />
                     
-                    <label><strong>Adjust TA Feedback:</strong></label>
+                    <label><strong>Adjust TA General Feedback:</strong></label>
                     <textarea value={manualFeedback} onChange={(e)=>setManualFeedback(e.target.value)} rows={4} style={{width: '100%', padding: '10px', marginBottom: '15px'}} />
                     
                     <div style={{display: 'flex', gap: '10px'}}>
@@ -374,33 +388,43 @@ function App() {
         </main>
       )}
 
-      {/* --- TAB 3: CLASS ROSTER (MongoDB) --- */}
+     {/* --- TAB 3: CLASS ROSTER (MongoDB) --- */}
       {activeTab === 'roster' && (
         <main className="main-content" style={{gridTemplateColumns: '1fr'}}>
           <section className="panel">
             <h2>🗄️ Master Class Roster (Live Database)</h2>
             {loadingRoster ? <p>Loading MongoDB...</p> : (
-              <table style={{width: '100%', textAlign: 'left', borderCollapse: 'collapse', marginTop: '20px'}}>
+              <table className="roster-table">
                 <thead>
-                  <tr style={{background: '#1a1a2e', color: 'white'}}>
-                    <th style={{padding: '10px'}}>Student ID</th>
-                    <th style={{padding: '10px'}}>Score</th>
-                    <th style={{padding: '10px'}}>Status</th>
-                    <th style={{padding: '10px'}}>TA Feedback</th>
+                  <tr>
+                    <th>Student ID</th>
+                    <th>Exam Score</th>
+                    <th>Review Status</th>
+                    <th>TA Feedback</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {rosterData.length === 0 && <tr><td colSpan="4" style={{padding: '10px'}}>No grades saved yet.</td></tr>}
-                  {rosterData.map((grade, index) => (
-                    <tr key={grade._id} style={{borderBottom: '1px solid #ccc', background: index % 2 === 0 ? '#f9f9f9' : 'white'}}>
-                      <td style={{padding: '10px', fontWeight: 'bold'}}>{grade.student_id}</td>
-                      <td style={{padding: '10px'}}><span className="score-badge" style={{fontSize: '14px', padding: '3px 8px'}}>{grade.total_score} / 5</span></td>
-                      <td style={{padding: '10px'}}>
-                        <span style={{background: grade.status === 'Approved' ? '#e8f5e9' : '#fff3e0', color: grade.status === 'Approved' ? '#2e7d32' : '#e65100', padding: '5px 10px', borderRadius: '4px', fontWeight: 'bold', fontSize: '12px'}}>
+                  {rosterData.length === 0 && <tr><td colSpan="4" style={{textAlign: 'center', color: '#666'}}>No grades saved yet.</td></tr>}
+                  {rosterData.map((grade) => (
+                    <tr key={grade._id}>
+                      <td style={{fontWeight: 'bold', color: '#1a1a2e'}}>{grade.student_id}</td>
+                      <td>
+                        <span className="score-badge">{grade.total_score} Pts</span>
+                      </td>
+                      <td>
+                        <span style={{
+                          background: grade.status === 'Approved' ? '#e8f5e9' : '#fff3e0', 
+                          color: grade.status === 'Approved' ? '#2e7d32' : '#e65100', 
+                          padding: '6px 12px', 
+                          borderRadius: '20px', 
+                          fontWeight: 'bold', 
+                          fontSize: '12px',
+                          whiteSpace: 'nowrap'
+                        }}>
                           {grade.status}
                         </span>
                       </td>
-                      <td style={{padding: '10px', fontSize: '14px', color: '#555'}}>{grade.feedback}</td>
+                      <td style={{fontSize: '14px', color: '#475569', lineHeight: '1.5'}}>{grade.feedback}</td>
                     </tr>
                   ))}
                 </tbody>
