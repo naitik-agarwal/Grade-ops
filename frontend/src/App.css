@@ -174,3 +174,20 @@ body {
   cursor: pointer;
   font-weight: bold;
 }
+.tabs {
+  display: flex;
+  gap: 10px;
+}
+.tabs button {
+  background: transparent;
+  color: white;
+  border: 1px solid white;
+  padding: 5px 15px;
+  border-radius: 4px;
+  cursor: pointer;
+}
+.active-tab {
+  background: #e94560 !important;
+  font-weight: bold;
+  border: none !important;
+}
