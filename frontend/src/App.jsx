@@ -161,6 +161,21 @@ function App() {
       setPlagLoading(false)
     }
   }
+  // E. DELETE FROM ROSTER
+  const deleteGrade = async (gradeId) => {
+    // Add a safety confirmation pop-up so the TA doesn't click it by accident
+    if (!window.confirm("⚠️ Are you sure you want to permanently delete this grade?")) return;
+    
+    try {
+      await axios.delete(`http://127.0.0.1:8000/api/grades/${gradeId}`)
+      
+      // Instantly remove it from the React UI without needing to refresh the database
+      setRosterData(rosterData.filter(grade => grade._id !== gradeId))
+      
+    } catch (err) {
+      alert("Failed to delete grade. Is the Python backend running?")
+    }
+  }
 
   // ==========================================
   //               UI HELPERS
@@ -401,6 +416,7 @@ function App() {
                     <th>Exam Score</th>
                     <th>Review Status</th>
                     <th>TA Feedback</th>
+                    <th>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -425,6 +441,27 @@ function App() {
                         </span>
                       </td>
                       <td style={{fontSize: '14px', color: '#475569', lineHeight: '1.5'}}>{grade.feedback}</td>
+                      
+                      {/* --- NEW DELETE BUTTON CELL --- */}
+                      <td>
+                        <button 
+                          onClick={() => deleteGrade(grade._id)}
+                          style={{
+                            background: '#ffebee', 
+                            color: '#d32f2f', 
+                            border: '1px solid #ffcdd2', 
+                            padding: '6px 12px', 
+                            borderRadius: '6px', 
+                            cursor: 'pointer',
+                            fontWeight: 'bold',
+                            transition: 'all 0.2s'
+                          }}
+                          onMouseOver={(e) => { e.target.style.background = '#ffcdd2'; }}
+                          onMouseOut={(e) => { e.target.style.background = '#ffebee'; }}
+                        >
+                          🗑️ Delete
+                        </button>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
