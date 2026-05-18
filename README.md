@@ -72,38 +72,44 @@ The result: consistent, auditable grades at scale — with a human always in the
 ## Features
 
 ### 🧠 Agentic Multi-Question Grading
+
 Processes entire handwritten exam PDFs in batch. The LangChain agent decomposes each paper question-by-question, evaluates answers against strict JSON rubrics, and awards partial credit with justifications — all in a single pipeline run.
 
 ### 👁️ Vision-Language OCR
+
 Google Gemini 2.5 Flash extracts and transcribes messy handwritten answers from scanned PDFs, handling varied handwriting styles, crossed-out text, and multi-page answer sheets.
 
 ### 🕵️ Logic-Based Plagiarism Detection
-Compares submissions not only for verbatim text matches, but for shared *anomalous logic structures* — the same wrong reasoning pattern appearing across papers, which is a strong indicator of copying.
+
+Compares submissions not only for verbatim text matches, but for shared _anomalous logic structures_ — the same wrong reasoning pattern appearing across papers, which is a strong indicator of copying.
 
 ### ✏️ Human-in-the-Loop (HITL) Review Dashboard
+
 A side-by-side view of the cropped student answer image and the AI-proposed grade. TAs can approve, override score, or edit feedback before committing to the database — with full keyboard shortcut support for rapid throughput.
 
 ### 🗄️ Live Class Roster
+
 MongoDB Atlas stores all finalized grades, structured feedback, and student IDs. The Instructor dashboard provides a real-time roster view with export capability.
 
 ### 🔐 Role-Based Access Control (RBAC)
-| Role | Capabilities |
-|---|---|
-| **Instructor** | Upload exams, define rubrics, view full roster, run plagiarism analysis |
-| **Teaching Assistant** | Access grading review queue, approve/override AI grades |
+
+| Role                   | Capabilities                                                            |
+| ---------------------- | ----------------------------------------------------------------------- |
+| **Instructor**         | Upload exams, define rubrics, view full roster, run plagiarism analysis |
+| **Teaching Assistant** | Access grading review queue, approve/override AI grades                 |
 
 ---
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| **Frontend** | React 18 (Vite), Axios, Custom CSS |
-| **Backend** | Python 3.11+, FastAPI, Uvicorn |
-| **Database** | MongoDB Atlas |
-| **AI / Vision** | Google Gemini 2.5 Flash |
+| Layer                     | Technology                                  |
+| ------------------------- | ------------------------------------------- |
+| **Frontend**              | React 18 (Vite), Axios, Custom CSS          |
+| **Backend**               | Python 3.11+, FastAPI, Uvicorn              |
+| **Database**              | MongoDB Atlas                               |
+| **AI / Vision**           | Google Gemini 2.5 Flash                     |
 | **Agentic Orchestration** | LangChain (Structured Outputs via Pydantic) |
-| **OCR Models (alt.)** | Hugging Face Nougat / Qwen-VL |
+| **OCR Models (alt.)**     | Hugging Face Nougat / Qwen-VL               |
 
 ---
 
@@ -112,40 +118,25 @@ MongoDB Atlas stores all finalized grades, structured feedback, and student IDs.
 ```
 GRADEOPS/
 ├── backend/
-│   ├── main.py                  # FastAPI app entry point
-│   ├── requirements.txt
-│   ├── .env.example
-│   ├── routers/
-│   │   ├── exams.py             # Exam upload & processing endpoints
-│   │   ├── grading.py           # Grading pipeline endpoints
-│   │   ├── plagiarism.py        # Plagiarism detection endpoints
-│   │   └── roster.py            # Class roster CRUD
-│   ├── agents/
-│   │   ├── grading_agent.py     # LangChain agentic grader
-│   │   └── plagiarism_agent.py  # Logic similarity checker
-│   ├── models/
-│   │   ├── rubric.py            # Pydantic rubric schema
-│   │   └── grade.py             # Pydantic grade output schema
-│   └── services/
-│       ├── ocr_service.py       # Gemini Vision OCR wrapper
-│       └── db_service.py        # MongoDB Atlas client
+│   ├── main.py              # FastAPI application entry point, routing & CORS policies
+│   ├── agentic_grader.py    # LangChain agent orchestration & Gemini multi-question grading logic
+│   ├── plagiarism_agent.py  # AI reasoning agent tracking shared semantic logic anomalies
+│   ├── vision_engine.py     # Multimodal Gemini Vision image-to-text extraction wrapper
+│   ├── database.py          # MongoDB Atlas cloud connection initialization
+│   ├── requirements.txt     # Python backend ecosystem dependencies (FastAPI, LangChain, etc.)
+│   └── rubric.json          # Local validation backup of the evaluation criteria schema
 │
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/
-│   │   │   ├── InstructorDashboard.jsx
-│   │   │   ├── TADashboard.jsx
-│   │   │   └── RosterView.jsx
-│   │   ├── components/
-│   │   │   ├── GradeReviewCard.jsx
-│   │   │   ├── RubricEditor.jsx
-│   │   │   └── PlagiarismReport.jsx
-│   │   └── api/
-│   │       └── client.js        # Axios instance & API helpers
-│   ├── package.json
-│   └── vite.config.js
+│   │   ├── App.jsx          # Core user interface containing all tab layouts & shortcut listeners
+│   │   ├── App.css          # Premium high-fidelity custom dark-mode glassmorphism styles
+│   │   └── main.jsx         # Vite standard mount script for rendering the React node tree
+│   ├── package.json         # Node platform dependencies configuration manifest
+│   └── vite.config.js       # Vite development server environment configuration
 │
-└── README.md
+├── .gitignore               # Secure patterns instructing Git to block venv and environment files
+├── LICENSE                  # Official open-source MIT legal documentation asset
+└── README.md                # General technical operations guide and introduction deck
 ```
 
 ---
@@ -238,16 +229,16 @@ ALLOWED_ORIGINS=http://localhost:5173
 
 Full interactive documentation is available at `/docs` (Swagger UI) and `/redoc` when the backend is running.
 
-| Method | Endpoint | Description | Role |
-|---|---|---|---|
-| `POST` | `/api/exams/upload` | Upload bulk exam PDF scans | Instructor |
-| `POST` | `/api/rubrics` | Create or update a grading rubric | Instructor |
-| `POST` | `/api/grading/run` | Trigger the full agentic grading pipeline | Instructor |
-| `GET` | `/api/grading/queue` | Fetch pending AI-graded papers for TA review | TA |
-| `PATCH` | `/api/grading/{id}/approve` | Approve an AI-proposed grade | TA |
-| `PATCH` | `/api/grading/{id}/override` | Submit a manual grade override | TA |
-| `GET` | `/api/roster` | Retrieve the full class grade roster | Instructor |
-| `POST` | `/api/plagiarism/scan` | Run plagiarism detection on a submission set | Instructor |
+| Method  | Endpoint                     | Description                                  | Role       |
+| ------- | ---------------------------- | -------------------------------------------- | ---------- |
+| `POST`  | `/api/exams/upload`          | Upload bulk exam PDF scans                   | Instructor |
+| `POST`  | `/api/rubrics`               | Create or update a grading rubric            | Instructor |
+| `POST`  | `/api/grading/run`           | Trigger the full agentic grading pipeline    | Instructor |
+| `GET`   | `/api/grading/queue`         | Fetch pending AI-graded papers for TA review | TA         |
+| `PATCH` | `/api/grading/{id}/approve`  | Approve an AI-proposed grade                 | TA         |
+| `PATCH` | `/api/grading/{id}/override` | Submit a manual grade override               | TA         |
+| `GET`   | `/api/roster`                | Retrieve the full class grade roster         | Instructor |
+| `POST`  | `/api/plagiarism/scan`       | Run plagiarism detection on a submission set | Instructor |
 
 ---
 
@@ -264,12 +255,12 @@ GradeOps uses JWT-based authentication with two distinct roles:
 
 The TA review dashboard is optimized for high-throughput grading workflows:
 
-| Key | Action |
-|---|---|
-| `Enter` | Approve AI-proposed grade and advance |
-| `Space` | Open override panel |
-| `←` / `→` | Navigate between submissions |
-| `Esc` | Cancel override and return to card |
+| Key       | Action                                |
+| --------- | ------------------------------------- |
+| `Enter`   | Approve AI-proposed grade and advance |
+| `Space`   | Open override panel                   |
+| `←` / `→` | Navigate between submissions          |
+| `Esc`     | Cancel override and return to card    |
 
 ---
 
